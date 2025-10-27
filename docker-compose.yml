@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      # Habilita SOLO lo necesario
+      CONTAINERS: 1
+      EVENTS: 1
+      INFO: 1
+      PING: 1
+      SYSTEM: 1
+      # Deshabilitado por defecto
+      IMAGES: 0
+      VOLUMES: 0
+      NETWORKS: 0
+      EXEC: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  api:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run start:dev"
+    env_file:
+      - ./api/.env
+    environment:
+      DOCKER_HOST: http://socket-proxy:2375
+      PORT: 3001
+    volumes:
+      - ./api:/app
+    depends_on:
+      - socket-proxy
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+web:
+  build:
+    context: ./web
+    dockerfile: Dockerfile
+  environment:
+    NODE_ENV: production
+    PORT: 3010
+  depends_on:
+    - api
+  ports:
+    - "3010:3010"
+  restart: unless-stopped

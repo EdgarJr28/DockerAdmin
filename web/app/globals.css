@@ -1,0 +1,68 @@
+/* 1) Tailwind */
+@import "tailwindcss";
+
+/* 2) Plugins (opcional) */
+@plugin "@tailwindcss/forms";
+
+/* 3) Tokens (opcional) */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --color-brand: #0ea5e9;
+}
+
+/* 4) Variables de tema (light por defecto) */
+:root {
+  --bg: #f8fafc;
+  /* slate-50   */
+  --text: #0f172a;
+  /* slate-900  */
+  --muted: #64748b;
+  /* slate-500/600 */
+  --surface-bg: #ffffff;
+  /* white      */
+  --surface-border: #e5e7eb;
+  /* slate-200  */
+  --accent: #10b981;
+  /* emerald-500 */
+}
+
+/* Oscuro (solo si <html class="dark">) */
+.dark {
+  --bg: #0f172a;
+  /* slate-900  */
+  --text: #e2e8f0;
+  /* slate-200  */
+  --muted: #94a3b8;
+  /* slate-400  */
+  --surface-bg: #1f2937;
+  /* slate-800  */
+  --surface-border: #334155;
+  /* slate-700  */
+  --accent: #34d399;
+  /* emerald-400 */
+}
+
+/* (Opcional) estilos base usando las vars */
+html,
+body {
+  /* si usas Tailwind en body, esto no es imprescindible */
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* (Opcional) utilidades personalizadas */
+@layer utilities {
+  .surface {
+    @apply bg-[var(--surface-bg)] border border-[color:var(--surface-border)];
+  }
+}
+
+@layer utilities {
+  /* Texto principal y secundario (usa tus vars) */
+  .text-main   { @apply text-[var(--text)]; }
+  .text-muted  { @apply text-[var(--muted)]; }
+
+  /* Enlaces de marca (opcional) */
+  .text-accent { @apply text-[var(--accent)]; }
+  .link-accent { @apply text-[var(--accent)] underline underline-offset-2 hover:opacity-90; }
+}
