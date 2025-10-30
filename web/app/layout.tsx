@@ -1,17 +1,22 @@
-import AppFooter from './components/layout/AppFooter';
-import AppHeader from './components/layout/AppHeader';
-import FabRadialNav from './components/layout/FabRadialNav';
-import ThemeColorScript from './components/theme/ThemeColorScript';
+import AppFooter from "./components/layout/AppFooter";
+import AppHeader from "./components/layout/AppHeader";
+import FabRadialNav from "./components/layout/FabRadialNav";
+import ThemeColorScript from "./components/theme/ThemeColorScript";
+import ToastContainer from "./components/ui/ToastContainer";
 
-import './globals.css';
-import type { Metadata } from 'next';
+import "./globals.css";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: 'Docker Board',
-  description: 'Dashboard de servicios y APIs',
+  title: "Docker Board",
+  description: "Dashboard de servicios y APIs",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     // 👇 NO pongas className ni style de tema aquí
     <html lang="es" suppressHydrationWarning>
@@ -27,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="max-w-6xl mx-auto px-6 py-6 flex-1">{children}</main>
         <AppFooter />
         <FabRadialNav />
+        <ToastContainer />
       </body>
     </html>
   );

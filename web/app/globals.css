@@ -2,10 +2,11 @@
 @import "tailwindcss";
 
 /* 2) Plugins (opcional) */
-@plugin "@tailwindcss/forms";
+/* Plugin configuration should be done in tailwind.config.js, not here. */
 
 /* 3) Tokens (opcional) */
-@theme {
+/* Custom properties for font and brand color */
+:root {
   --font-sans: ui-sans-serif, system-ui, sans-serif;
   --color-brand: #0ea5e9;
 }
@@ -25,8 +26,9 @@
   --accent: #10b981;
   /* emerald-500 */
 }
-
 /* Oscuro (solo si <html class="dark">) */
+/* Removed unknown @custom-variant; use the .dark class on <html> (or body) to enable dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
 .dark {
   --bg: #0f172a;
   /* slate-900  */
@@ -53,16 +55,18 @@ body {
 /* (Opcional) utilidades personalizadas */
 @layer utilities {
   .surface {
-    @apply bg-[var(--surface-bg)] border border-[color:var(--surface-border)];
+    background-color: var(--surface-bg);
+    border: 1px solid var(--surface-border);
   }
 }
 
 @layer utilities {
   /* Texto principal y secundario (usa tus vars) */
-  .text-main   { @apply text-[var(--text)]; }
-  .text-muted  { @apply text-[var(--muted)]; }
+  .text-main   { color: var(--text); }
+  .text-muted  { color: var(--muted); }
 
   /* Enlaces de marca (opcional) */
-  .text-accent { @apply text-[var(--accent)]; }
-  .link-accent { @apply text-[var(--accent)] underline underline-offset-2 hover:opacity-90; }
+  .text-accent { color: var(--accent); }
+  .link-accent { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; transition: opacity 0.2s; }
+  .link-accent:hover { opacity: 0.9; }
 }

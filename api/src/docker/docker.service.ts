@@ -1,51 +1,47 @@
 import Docker from 'dockerode';
 import { Injectable } from '@nestjs/common';
-
+import { getHostById } from './registry';
+import { getDockerClientFor } from './client-factory';
 
 @Injectable()
 export class DockerService {
-    private docker: Docker;
-    constructor() {
-        const host = process.env.DOCKER_HOST || 'http://socket-proxy:2375';
-        this.docker = new Docker({ host, port: 2375 });
-    }
+  private client(hostId: string): Docker {
+    const host = getHostById(hostId);
+    return getDockerClientFor(host);
+  }
 
+  listContainers(hostId: string, all = true) {
+    return this.client(hostId).listContainers({ all });
+  }
 
-    listContainers(all = true) {
-        return this.docker.listContainers({ all });
-    }
+  async start(hostId: string, id: string) {
+    const c = this.client(hostId).getContainer(id);
+    await c.start();
+    return { ok: true };
+  }
 
+  async stop(hostId: string, id: string) {
+    const c = this.client(hostId).getContainer(id);
+    await c.stop();
+    return { ok: true };
+  }
 
-    get(id: string) {
-        return this.docker.getContainer(id);
-    }
+  async restart(hostId: string, id: string) {
+    const c = this.client(hostId).getContainer(id);
+    await c.restart();
+    return { ok: true };
+  }
 
+  async stats(hostId: string, id: string) {
+    const c = this.client(hostId).getContainer(id);
+    // Nota: dockerode stats devuelve stream; ajusta a tu formato
+    // Aquí devuelve el JSON puntual (si lo implementaste así)
+    return c.stats({ stream: false });
+  }
 
-    async start(id: string) {
-        await this.get(id).start();
-        return { ok: true };
-    }
-
-
-    async stop(id: string) {
-        await this.get(id).stop();
-        return { ok: true };
-    }
-
-
-    async restart(id: string) {
-        await this.get(id).restart();
-        return { ok: true };
-    }
-
-
-    stats(id: string) {
-        return this.get(id).stats({ stream: false });
-    }
-
-
-    async logsStream(id: string) {
-        const c = this.get(id);
-        return c.logs({ follow: true, stdout: true, stderr: true, tail: 200 });
-    }
+  async logsStream(hostId: string, id: string) {
+    const c = this.client(hostId).getContainer(id);
+    // Devuelve stream (stdout/stderr)
+    return c.logs({ follow: true, stdout: true, stderr: true, tail: 200 });
+  }
 }
