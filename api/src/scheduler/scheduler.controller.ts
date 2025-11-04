@@ -12,8 +12,10 @@ import {
 import { SchedulerService } from './scheduler.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
+import { Public } from 'src/auth/decorator/public.decorator';
 
 @Controller('scheduler')
+@Public()
 export class SchedulerController {
   constructor(private readonly svc: SchedulerService) {}
 

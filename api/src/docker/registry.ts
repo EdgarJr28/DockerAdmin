@@ -1,14 +1,15 @@
-export type DockerConnType = 'SOCKET_PROXY' | 'TLS_TCP';
+export type DockerHostType = "SOCKET_PROXY" | "TCP" | "TLS_TCP";
 
 export interface DockerHostConfig {
   id: string; // "wayuu-dev", "albafire-prod"
   name: string; // etiqueta
-  type: DockerConnType;
+  type: DockerHostType;
   baseUrl?: string; // SOCKET_PROXY: ej. "http://socket-proxy:2375"
   tcpHost?: string; // TLS_TCP
   tcpPort?: number; // 2376
   certPath?: string; // /run/secrets/docker-certs/<hostId>
   enabled: boolean;
+  default: boolean;
 }
 
 // Empieza hardcode; luego lo puedes llevar a DB
@@ -19,6 +20,7 @@ export const HOSTS: DockerHostConfig[] = [
     type: 'SOCKET_PROXY',
     baseUrl: 'http://127.0.0.1:2375',
     enabled: true,
+    default: false,
   },
 ];
 

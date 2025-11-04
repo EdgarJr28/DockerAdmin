@@ -3,22 +3,42 @@ services:
     image: tecnativa/docker-socket-proxy:latest
     container_name: socket-proxy
     environment:
+      # permisos
       CONTAINERS: 1
       IMAGES: 1
       INFO: 1
       VERSION: 1
       PING: 1
-      # Solo si en desarrollo vas a arrancar/parar contenedores:
-      # POST: 1
-      # ALLOW_START: 1
-      # ALLOW_STOP: 1
-      # ALLOW_RESTART: 1
+
+      # permitir métodos POST
+      POST: 1
+      CONTAINERS_START: 1
+      CONTAINERS_STOP: 1
+      CONTAINERS_RESTART: 1
+
+      # activar auth básica
+      AUTH: 1
+      USERNAME: admin
+      PASSWORD: supersecreto123
+
       LOG_LEVEL: info
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "127.0.0.1:2375:2375"  # ← Solo accesible desde el propio servidor
+      - "127.0.0.1:2375:2375"
     restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin@ludycom++
+    volumes:
+      - ./data/mongo:/data/db
 
   api:
     image: node:20-alpine
@@ -35,18 +55,40 @@ services:
       - ./api:/app
     depends_on:
       - socket-proxy
+      - mongo
+      - keycloak   # ⬅️ para que arranque después de keycloak
     ports:
       - "3011:3001"
     restart: unless-stopped
 
-  web:
-    build:
-      context: ./web
+  # ==========================
+  # KEYCLOAK (modo dev)
+  # ==========================
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak
+    command: >
+      start-dev
+      --http-port=8080
     environment:
-      NODE_ENV: production
-      PORT: 3010
-    depends_on:
-      - api
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_PROXY: edge
     ports:
-      - "3010:3010"
+      - "8080:8080"
     restart: unless-stopped
+    # si quieres persistir el dev-file:
+    volumes:
+      - ./data/keycloak:/opt/keycloak/data
+
+#  web:
+#    build:
+#      context: ./web
+#    environment:
+#      NODE_ENV: production
+#      PORT: 3010
+#    depends_on:
+#      - api
+#    ports:
+#      - "3010:3010"
+#    restart: unless-stopped

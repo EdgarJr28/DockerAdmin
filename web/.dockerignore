@@ -1,0 +1,12 @@
+# .dockerignore
+node_modules
+npm-debug.log
+Dockerfile
+docker-compose.yml
+.dockerignore
+.vscode
+.git
+.gitignore
+.env.local
+app/global-error.tsx
+app/not-found.tsx

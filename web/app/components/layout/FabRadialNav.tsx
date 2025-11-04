@@ -6,7 +6,7 @@ type Item = { label: string; href: string; emoji?: string };
 
 const ITEMS: Item[] = [
   { label: "Dashboard", href: "/dashboard", emoji: "📊" },
-  { label: "Servicios", href: "/services", emoji: "🐳" },
+  { label: "Contenedores", href: "/services", emoji: "🐳" },
   { label: "APIs", href: "/apis", emoji: "🔌" },
   { label: "Scheduler", href: "/scheduler", emoji: "⏰" }, // ✅ nuevo
 ];

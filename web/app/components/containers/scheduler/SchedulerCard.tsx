@@ -1,14 +1,13 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
-import { Card } from "@/app/components/ui/Card";
 import Button from "@/app/components/ui/Button";
 import { Scheduler, Containers } from "@/app/libs/api";
 import { useToastStore } from "@/app/store/toast-store";
 import { CronMode, parseTime, toCron } from "@/app/utils/cron";
 import { Clock3, Info, CheckCircle2 } from "lucide-react";
-
 import { useDockerHost } from "@/app/store/docker-host";
-import SelectPicker, { SelectOption } from "../../ui/SelectPicker";
+import SelectPicker, { SelectOption } from "@/app/components/ui/SelectPicker";
 
 interface SchedulerCardProps {
   task?: {
@@ -17,6 +16,7 @@ interface SchedulerCardProps {
     target: string;
     timezone?: string;
     enabled?: boolean;
+    hostId?: string;
   } | null;
   onSaved?: () => void;
 }
@@ -30,6 +30,7 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
   const showToast = useToastStore((s) => s.showToast);
   const isEditing = !!task;
 
+  // host seleccionado en el header / store
   const { hostId } = useDockerHost();
 
   // Estados principales
@@ -46,13 +47,13 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<null | { type: "save" | "disable" }>(null);
 
   // Containers
   const [allContainers, setAllContainers] = useState<any[]>([]);
   const [scheduledTargets, setScheduledTargets] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
   const [loadingContainers, setLoadingContainers] = useState(false);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
 
   // Inicializar si viene en modo edición
   useEffect(() => {
@@ -64,28 +65,55 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
     }
   }, [isEditing, task]);
 
-  // Cargar cron existentes (para marcar “ya programados”)
+  // Cargar schedulers SOLO del host actual
   useEffect(() => {
+    let alive = true;
     (async () => {
+      if (!hostId) {
+        setScheduledTargets(new Set());
+        return;
+      }
+      setLoadingSchedules(true);
       try {
-        const items = await Scheduler.list();
+        const items = await Scheduler.listByHost(hostId);
+        if (!alive) return;
+
+        if (!Array.isArray(items) || items.length === 0) {
+          // no hay tareas para este host
+          setScheduledTargets(new Set());
+          return;
+        }
+
         setScheduledTargets(
-          new Set(items.map((i: any) => (i?.target || "").trim()).filter(Boolean))
+          new Set(
+            items
+              .map((i: any) => (i?.target || "").trim())
+              .filter(Boolean)
+          )
         );
       } catch (e) {
-        // opcional: manejar error
+        // si falla, no mostramos nada
+        setScheduledTargets(new Set());
+      } finally {
+        if (alive) setLoadingSchedules(false);
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [hostId]);
 
   // Cargar contenedores del host activo
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!hostId) return;
+      if (!hostId) {
+        setAllContainers([]);
+        return;
+      }
       setLoadingContainers(true);
       try {
-        const all = await Containers.list(hostId); // ⇐ host-aware
+        const all = await Containers.list(hostId);
         if (!alive) return;
         setAllContainers(Array.isArray(all) ? all : []);
       } catch (e) {
@@ -105,26 +133,25 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
       .map((c: any) => {
         const name = (c.Names?.[0] || "").replace(/^\//, "");
         const running = (c.State || "").toLowerCase() === "running";
-        return { c, name, running };
+        return { name, running };
       })
       .filter(({ name }) => !!name && !name.includes("admin-board"));
 
-    // Si no mostramos "ya programados", filtramos esos nombres
+    // si no quiero ver los ya programados
     const filtered = showHidden
       ? base
       : base.filter(({ name }) => !scheduledTargets.has(name));
 
-    // Mapear a opciones UI-only
-    const opts: SelectOption[] = filtered.map(({ c, name, running }) => ({
-      value: name,
-      label: name,
-      rightDotClass: running ? "bg-emerald-500" : "bg-red-500",
-      // Si mostramos "ya programados", los incluimos deshabilitados y con texto
-      disabled: showHidden ? scheduledTargets.has(name) : false,
-      rightText: showHidden && scheduledTargets.has(name) ? "ya tiene cron" : undefined,
-    }));
-
-    return opts.sort((a, b) => a.label.localeCompare(b.label));
+    return filtered
+      .map(({ name, running }) => ({
+        value: name,
+        label: name,
+        rightDotClass: running ? "bg-emerald-500" : "bg-red-500",
+        disabled: showHidden ? scheduledTargets.has(name) : false,
+        rightText:
+          showHidden && scheduledTargets.has(name) ? "ya tiene cron" : undefined,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [allContainers, showHidden, scheduledTargets]);
 
   // Sincronizar hora/minuto
@@ -138,21 +165,29 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
     else if (mode === "everyHours") cron = toCron({ mode, n: eachN, minute });
     else if (mode === "daily") cron = toCron({ mode, hour, minute });
     else if (mode === "weekly") cron = toCron({ mode, hour, minute, days });
-    else if (mode === "monthly") cron = toCron({ mode, hour, minute, day: monthDay });
+    else if (mode === "monthly")
+      cron = toCron({ mode, hour, minute, day: monthDay });
     setExpr(cron);
   }, [mode, hour, minute, days, eachN, monthDay]);
 
-  const canSave = isLikelyCron(expr) && target.trim().length > 0;
+  const canSave = isLikelyCron(expr) && target.trim().length > 0 && !!hostId;
 
   // Guardar / Actualizar
   const onSave = async () => {
     setSaving(true);
     try {
       if (isEditing && task) {
-        await Scheduler.update(task.id, { expr: expr.trim(), timezone });
+        // si la tarea tiene hostId úsalo, si no, usa el actual
+        const hid = task.hostId ?? hostId;
+        await Scheduler.update(task.id, {
+          expr: expr.trim(),
+          timezone,
+          hostId: hid,
+        });
         showToast(`Tarea de ${task.target} actualizada`, "success");
       } else {
-        await Scheduler.create(expr.trim(), target.trim(), timezone);
+        // crear para el host seleccionado
+        await Scheduler.createForHost(expr.trim(), target.trim(), timezone, hostId!);
         showToast("Programación creada", "success");
       }
       onSaved?.();
@@ -161,22 +196,6 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
       showToast("Error al guardar", "error");
     } finally {
       setSaving(false);
-      setPendingAction(null);
-    }
-  };
-
-  // Eliminar tarea
-  const onDisable = async () => {
-    if (!task) return;
-    setSaving(true);
-    try {
-      await Scheduler.remove(task.id);
-      showToast("Tarea eliminada", "info");
-    } catch (e: any) {
-      showToast("Error al eliminar", "error");
-    } finally {
-      setSaving(false);
-      setPendingAction(null);
     }
   };
 
@@ -200,7 +219,20 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
         </div>
       )}
 
-      {/* Selector de contenedor (UI-only SelectPicker) */}
+      {/* Mensaje de estado de schedulers por host */}
+      {!loadingSchedules && !!hostId && scheduledTargets.size === 0 && (
+        <div className="text-sm text-slate-500 border rounded-md px-3 py-2 bg-slate-50 dark:bg-slate-800/30">
+          Aún no hay tareas configuradas para este servidor.
+        </div>
+      )}
+
+      {!hostId && (
+        <div className="text-sm text-amber-700 border border-amber-200 bg-amber-50 rounded-md px-3 py-2">
+          Selecciona primero un servidor Docker en el header.
+        </div>
+      )}
+
+      {/* Selector de contenedor */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium">Container objetivo</label>
@@ -216,7 +248,6 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
           )}
         </div>
 
-        {/* En edición, bloqueado */}
         {isEditing ? (
           <div className="rounded-lg border px-3 py-2 text-sm bg-gray-50 dark:bg-slate-800/50 flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
@@ -231,8 +262,8 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
               loadingContainers
                 ? "Cargando contenedores…"
                 : hostId
-                ? "Selecciona un contenedor"
-                : "Selecciona primero un servidor"
+                  ? "Selecciona un contenedor"
+                  : "Selecciona primero un servidor"
             }
             widthClass="w-full"
             disabled={saving || loadingContainers || !hostId}
@@ -283,7 +314,9 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
           }}
         />
         {!isLikelyCron(expr) && expr.trim() !== "" && (
-          <p className="mt-1 text-xs text-amber-700">Formato cron poco probable. Verifica.</p>
+          <p className="mt-1 text-xs text-amber-700">
+            Formato cron poco probable. Verifica.
+          </p>
         )}
       </div>
 
@@ -293,13 +326,22 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
           <span className="inline-flex items-center gap-1 text-muted">
             <Info className="h-3.5 w-3.5" /> Presets:
           </span>
-          <button onClick={() => applyPreset("0 3 * * *")} className="px-2 py-1 rounded-full border hover:bg-slate-50">
+          <button
+            onClick={() => applyPreset("0 3 * * *")}
+            className="px-2 py-1 rounded-full border hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
             Diario 03:00
           </button>
-          <button onClick={() => applyPreset("0 */6 * * *")} className="px-2 py-1 rounded-full border hover:bg-slate-50">
+          <button
+            onClick={() => applyPreset("0 */6 * * *")}
+            className="px-2 py-1 rounded-full border hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
             Cada 6 horas
           </button>
-          <button onClick={() => applyPreset("0 0 * * 0")} className="px-2 py-1 rounded-full border hover:bg-slate-50">
+          <button
+            onClick={() => applyPreset("0 0 * * 0")}
+            className="px-2 py-1 rounded-full border hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
             Domingos 00:00
           </button>
         </div>
@@ -307,8 +349,12 @@ export default function SchedulerCard({ task, onSaved }: SchedulerCardProps) {
 
       {/* Acciones */}
       <div className="flex gap-2">
-        <Button onClick={() => setPendingAction({ type: "save" })} disabled={!canSave || saving}>
-          {saving ? "Guardando…" : isEditing ? "Actualizar programación" : "Guardar programación"}
+        <Button onClick={onSave} disabled={!canSave || saving}>
+          {saving
+            ? "Guardando…"
+            : isEditing
+              ? "Actualizar programación"
+              : "Guardar programación"}
         </Button>
       </div>
     </div>

@@ -2,12 +2,14 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Instala TODAS las dependencias (incluyendo dev)
 COPY package*.json ./
 ENV NODE_ENV=development
 RUN npm ci
 
+# copia todo, incluyendo app/error.tsx y app/global-error.tsx
 COPY . .
+
+# build
 RUN npm run build
 
 # ===== Run =====

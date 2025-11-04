@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": "267764eb-e625-406c-8375-c23289a39bd8",
+    "hostId": "ins-wayuu",
+    "expr": "0 1 * * *",
+    "target": "ins-wayuu-backend",
+    "targetKind": "container",
+    "enabled": true,
+    "timezone": "America/Bogota",
+    "createdAt": "2025-10-30T15:09:21.782Z",
+    "updatedAt": "2025-10-30T15:09:55.608Z"
+  }
+]

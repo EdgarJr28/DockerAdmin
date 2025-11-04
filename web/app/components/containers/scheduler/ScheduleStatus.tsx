@@ -1,19 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useState, useCallback } from "react";
 import { Scheduler } from "@/app/libs/api";
 import {
-  CalendarClock,
-  CheckCircle2,
   AlertTriangle,
   RefreshCw,
   Trash2,
   Pencil,
   Plus,
+  CheckCircle2,
 } from "lucide-react";
 import Button from "../../ui/Button";
 import Modal from "../../ui/Modal";
 import ConfirmDialog from "../../ui/ConfirmDialog";
 import SchedulerCard from "../scheduler/SchedulerCard";
+import { useDockerHost } from "@/app/store/docker-host";
 
 type Sched = {
   id: string;
@@ -23,6 +24,7 @@ type Sched = {
   timezone?: string;
   createdAt?: string;
   updatedAt?: string;
+  hostId?: string;
 };
 
 async function nextRun(expr: string, tz?: string) {
@@ -37,6 +39,8 @@ async function nextRun(expr: string, tz?: string) {
 }
 
 export default function SchedulesList() {
+  const { hostId } = useDockerHost();
+
   const [items, setItems] = useState<Sched[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -49,50 +53,63 @@ export default function SchedulesList() {
   const [confirmDelete, setConfirmDelete] = useState<null | Sched>(null);
   const [confirmToggle, setConfirmToggle] = useState<null | Sched>(null);
 
-  // 🔄 Carga y cálculo de próximas ejecuciones
-  const load = async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const list = await Scheduler.list();
-      setItems(list);
-      const pairs = await Promise.all(
-        list.map(
-          async (s) => [s.id, await nextRun(s.expr, s.timezone)] as const
-        )
-      );
-      setNextMap(Object.fromEntries(pairs));
-    } catch (e: any) {
-      setErr(e.message ?? "No se pudo obtener la lista de tareas");
-    } finally {
-      setLoading(false);
-    }
+  const computeNexts = async (list: Sched[]) => {
+    const pairs = await Promise.all(
+      list.map(
+        async (s) => [s.id, await nextRun(s.expr, s.timezone)] as const
+      )
+    );
+    setNextMap(Object.fromEntries(pairs));
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  // carga principal por host
+  const load = useCallback(
+    async (hid?: string) => {
+      if (!hid) {
+        setItems([]);
+        setNextMap({});
+        setLoading(false);
+        setErr(null);
+        return;
+      }
+      setLoading(true);
+      setErr(null);
+      try {
+        const list = await Scheduler.listByHost(hid);
+        setItems(list);
+        await computeNexts(list);
+      } catch (e: any) {
+        setErr(e.message ?? "No se pudo obtener la lista de tareas");
+        setItems([]);
+        setNextMap({});
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
-  // 🔁 Refresco suave sin mostrar “cargando…”
+  // carga inicial y cuando cambia el host
+  useEffect(() => {
+    void load(hostId);
+  }, [hostId, load]);
+
+  // refresco suave
   const refresh = async () => {
+    if (!hostId) return;
     setRefreshing(true);
     try {
-      const list = await Scheduler.list();
+      const list = await Scheduler.listByHost(hostId);
       setItems(list);
-      const pairs = await Promise.all(
-        list.map(
-          async (s) => [s.id, await nextRun(s.expr, s.timezone)] as const
-        )
-      );
-      setNextMap(Object.fromEntries(pairs));
+      await computeNexts(list);
     } catch {
-      /* ignoramos errores menores */
+      // ignoramos errores menores
     } finally {
       setRefreshing(false);
     }
   };
 
-  // 🔀 Toggle ON/OFF (confirmado)
+  // Toggle ON/OFF
   const handleToggleConfirm = async () => {
     if (!confirmToggle) return;
     try {
@@ -106,7 +123,7 @@ export default function SchedulesList() {
     }
   };
 
-  // 🗑️ Eliminar tarea (confirmado)
+  // Eliminar
   const handleDeleteConfirm = async () => {
     if (!confirmDelete) return;
     try {
@@ -132,14 +149,19 @@ export default function SchedulesList() {
     await refresh();
   };
 
-  const empty = !loading && !items.length && !err;
+  const empty = !loading && !items.length && !err && !!hostId;
 
   return (
     <div className="surface rounded-xl border p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between w-xl">
         <div className="flex items-center gap-2">
-          {loading && (
+          {!hostId && (
+            <span className="text-xs text-amber-700">
+              Selecciona un servidor Docker para ver sus tareas.
+            </span>
+          )}
+          {loading && hostId && (
             <span className="text-xs text-(--muted)">actualizando…</span>
           )}
         </div>
@@ -147,6 +169,7 @@ export default function SchedulesList() {
           <Button
             variant="outline"
             onClick={refresh}
+            disabled={!hostId}
             className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded"
           >
             <RefreshCw
@@ -160,6 +183,7 @@ export default function SchedulesList() {
           <Button
             variant="outline"
             onClick={() => openEditor()}
+            disabled={!hostId}
             className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded"
           >
             <Plus className="h-4 w-4" /> Nueva tarea
@@ -174,6 +198,19 @@ export default function SchedulesList() {
         </div>
       )}
 
+      {/* Sin host */}
+      {!err && !hostId && (
+        <div className="flex flex-col gap-1 text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            No hay servidor seleccionado.
+          </div>
+          <p className="text-xs text-slate-500">
+            Elige un servidor en el header para ver o crear tareas programadas.
+          </p>
+        </div>
+      )}
+
       {/* Empty state */}
       {empty && (
         <div className="flex flex-col gap-1 text-sm text-slate-600">
@@ -182,7 +219,7 @@ export default function SchedulesList() {
             No hay tareas configuradas.
           </div>
           <p className="text-xs text-slate-500">
-            Aún no hay tareas programadas en el background.
+            Aún no hay tareas programadas en el background para este servidor.
           </p>
         </div>
       )}

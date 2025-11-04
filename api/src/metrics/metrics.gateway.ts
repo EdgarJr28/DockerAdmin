@@ -6,7 +6,7 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { MetricsService } from './metrics.service';
 
 @WebSocketGateway({
@@ -20,34 +20,61 @@ export class MetricsGateway
 {
   @WebSocketServer() io: Server;
 
+  // guardamos los intervalos por socket
+  private timers = new Map<string, NodeJS.Timeout>();
+
   constructor(private readonly metricsService: MetricsService) {}
 
   afterInit() {
     console.log('✅ Metrics gateway initialized');
   }
 
-  handleConnection(socket: any) {
+  handleConnection(socket: Socket) {
     console.log(`📡 Client connected: ${socket.id}`);
-    this.emitMetrics(socket);
+
+    // OJO: ya no llamamos this.emitMetrics(socket) aquí
+    // esperamos a que el cliente diga qué host quiere
+    socket.on('metrics:subscribe', ({ hostId } = { hostId: 'local' }) => {
+      this.startEmitter(socket, hostId || 'local');
+    });
+
+    // si quieres un default cuando NO mandan nada:
+    // this.startEmitter(socket, 'local');
   }
 
-  handleDisconnect(socket: any) {
+  handleDisconnect(socket: Socket) {
     console.log(`❌ Client disconnected: ${socket.id}`);
+    const t = this.timers.get(socket.id);
+    if (t) {
+      clearInterval(t);
+      this.timers.delete(socket.id);
+    }
   }
 
-  // Emitir métricas cada 5 s
-  async emitMetrics(socket: any) {
-    const interval = setInterval(async () => {
+  private startEmitter(socket: Socket, hostId: string) {
+    // si ya había un intervalo para este socket, lo limpiamos
+    const prev = this.timers.get(socket.id);
+    if (prev) {
+      clearInterval(prev);
+    }
+
+    console.log(`📊 ${socket.id} -> metrics for host '${hostId}'`);
+
+    const timer = setInterval(async () => {
       try {
+        // AQUÍ ya pasamos el hostId
         const host = await this.metricsService.host();
-        const docker = await this.metricsService.docker();
+        const docker = await this.metricsService.docker(hostId);
 
         socket.emit('metrics:update', { host, docker });
-      } catch (err) {
-        socket.emit('metrics:error', { message: err.message });
+      } catch (err: any) {
+        socket.emit('metrics:error', {
+          message: err.message,
+          hostId,
+        });
       }
     }, 5000);
 
-    socket.on('disconnect', () => clearInterval(interval));
+    this.timers.set(socket.id, timer);
   }
 }

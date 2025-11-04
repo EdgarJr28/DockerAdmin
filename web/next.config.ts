@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  basePath: '/board',
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || "/board",
 };
+
 export default nextConfig;
